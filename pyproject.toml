@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mechrender"
+version = "0.1.0"
+authors = [{ name = "Mirza Cenanovic", email = "mirza.cenanovic@gmail.com" }]
+description = "Parametric machine-element geometry and Blender rendering for engineering teaching."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+# Only the numpy geometry is importable outside Blender; the rest runs inside Blender's Python.
+dependencies = ["numpy>=1.20"]
+
+[tool.setuptools]
+packages = ["mechrender"]
