@@ -4,7 +4,7 @@ The house style is a product shot for a textbook page: a transparent background 
 shadow catcher, so the image works on light and dark pages; Blender's bundled studio HDRI
 plus two soft area lights; Cycles with denoising; the camera fitted to the objects.
 
-Geometry is given in millimetres, as in `mechrender.geometry`, and converted to metres
+Geometry is given in millimetres, as in `mkparts.geometry`, and converted to metres
 (Blender units) here. Sizes in millimetres keep the numbers the same as on a drawing.
 """
 import sys

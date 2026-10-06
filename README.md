@@ -1,12 +1,18 @@
-# MechRender
+# mechanicskit-parts
 
-Parametric machine-element geometry and Blender rendering for engineering teaching.
+Parametric machine-element parts for engineering teaching, and adapters that hand them to
+the software engineers use: Blender today, CAD and finite element tools next.
 
-MechRender turns engineering parameters (coil diameter, wire diameter, number of coils,
-pitch) into photorealistic product renders and animations, written as Python scripts and
-rendered headless. It was built for the springs chapter of the
-*Applied Mechanics* textbook at Jönköping University, where it replaced
-photographs we had no rights to with images we can regenerate whenever a parameter changes.
+A part is defined by its engineering parameters (for a spring: coil diameter, wire
+diameter, number of coils, pitch) and computed once as plain numpy geometry. Thin adapters
+then turn that geometry into whatever a program needs: a photorealistic render or animation
+in Blender, and in future a solid model, a mesh or a simulation deck. The package is a
+companion to [MechanicsKit](https://github.com/cenmir/MechanicsKit) and is imported as
+`mkparts`.
+
+It started in the springs chapter of the *Applied Mechanics* textbook at Jönköping
+University, where it replaced photographs we had no rights to with renders we can
+regenerate whenever a parameter changes.
 
 ![Three spring types rendered by examples/spring_gallery.py](docs/images/spring_gallery.png)
 
@@ -21,9 +27,9 @@ that looks about right.
 
 | Module | Runs in | Contents |
 |---|---|---|
-| `mechrender.geometry` | any Python with numpy | Wire centre lines for compression (closed and ground ends, conical, variable pitch), extension and torsion springs; disc-spring sections; `revolve` for any solid of revolution. Millimetres throughout. |
-| `mechrender.blender` | Blender | The house style: empty scene, Cycles, transparent film with a shadow catcher, studio lighting, materials (steel, powder coat), camera fitted to the objects, GPU selection, command-line flags. |
-| `mechrender.springs` | Blender | Springs as objects: sweeps a wire along a centre line, grinds the ends flat, revolves disc springs. |
+| `mkparts.geometry` | any Python with numpy | Wire centre lines for compression (closed and ground ends, conical, variable pitch), extension and torsion springs; disc-spring sections; `revolve` for any solid of revolution. Millimetres throughout. |
+| `mkparts.blender` | Blender | The house style: empty scene, Cycles, transparent film with a shadow catcher, studio lighting, materials (steel, powder coat), camera fitted to the objects, GPU selection, command-line flags. |
+| `mkparts.springs` | Blender | Springs as objects: sweeps a wire along a centre line, grinds the ends flat, revolves disc springs. |
 | `bin/remote-render` | your shell | Renders a script on a remote GPU machine over ssh and copies the images back. |
 
 The split is deliberate. The geometry is ordinary numpy, so the same centre line can be
@@ -33,7 +39,7 @@ needs Blender.
 ## Quick start
 
 1. Download [Blender 5.2 LTS](https://www.blender.org/download/lts/). The portable archive
-   needs no installation; MechRender also runs on 4.2 LTS.
+   needs no installation; mechanicskit-parts also runs on 4.2 LTS.
 2. Clone this repository and render the example:
 
    ```sh
@@ -45,8 +51,8 @@ needs Blender.
    computer. Drop it for the final image. The PNG appears in `out/`.
 
 Blender has its own Python, which ignores your system's packages and `PYTHONPATH`. The
-scripts therefore add their own folder, the repository root and the `MECHRENDER`
-environment variable to `sys.path` before importing `mechrender`.
+scripts therefore add their own folder, the repository root and the `MKPARTS`
+environment variable to `sys.path` before importing `mkparts`.
 
 ## Writing a scene
 
@@ -56,10 +62,10 @@ image of the springs chapter:
 ```python
 import os, sys
 from pathlib import Path
-sys.path[:0] = [str(Path(__file__).resolve().parent), os.environ.get('MECHRENDER', '')]
+sys.path[:0] = [str(Path(__file__).resolve().parent), os.environ.get('MKPARTS', '')]
 
-from mechrender import blender as mb
-from mechrender.springs import compression_spring
+from mkparts import blender as mb
+from mkparts.springs import compression_spring
 
 names, opts = mb.args()                                   # --preview, --gpu, --out DIR
 sc = mb.reset_scene(opts['preview'], res=(1400, 1800))
@@ -96,7 +102,7 @@ bin/remote-render examples/spring_gallery.py            # images come back to ./
 bin/remote-render -f figures/ path/to/my_scene.py hero  # fetch somewhere else, pass args
 ```
 
-It copies the script, the other `.py` files beside it and the `mechrender` package to
+It copies the script, the other `.py` files beside it and the `mkparts` package to
 `%USERPROFILE%\render\<script name>` on the render machine, runs Blender there with `--gpu`,
 and copies back whatever the script wrote under `--out`. The render machine is assumed to
 be Windows with Blender installed; set `RENDER_HOST` (an ssh host name, default `euler`)
@@ -107,6 +113,26 @@ dedicated ssh key. The two machines are on different networks, so they are joine
 [Tailscale](https://tailscale.com), which gets through NAT and restrictive firewalls without
 port forwarding. On a Linux machine without root, Tailscale runs in userspace mode and ssh
 reaches the render machine through `ProxyCommand tailscale nc %h %p`.
+
+## Other software: planned adapters
+
+The geometry layer does not know about Blender, so the same parts can be handed to other
+programs. Most engineering software embeds its own Python, and an adapter is a small module
+that runs inside it, or a writer that produces the program's input file. These are the
+adapters we intend to add, roughly in order:
+
+| Software | What the adapter would do | How it runs |
+|---|---|---|
+| [FreeCAD](https://www.freecad.org) | Solid models of the parts, STEP export for any CAD system and for 3D printing | FreeCAD's bundled Python (`FreeCAD`, `Part`), headless with `freecadcmd` |
+| [OpenSCAD](https://openscad.org) | Printable parts as `.scad` files that students can open and edit | Writes OpenSCAD source text; no OpenSCAD Python needed |
+| [Fusion 360](https://www.autodesk.com/products/fusion-360) | Parametric parts in Fusion, for design projects that continue in CAD | A Fusion add-in script using the `adsk` API |
+| [ANSA](https://www.beta-cae.com/ansa.htm) | Meshing the parts for finite element analysis | ANSA's embedded Python |
+| [LS-DYNA](https://lsdyna.ansys.com) | Simulation decks: nodes, elements, materials and loads as keyword files | Writes `.k` keyword text directly |
+| [META](https://www.beta-cae.com/meta.htm) | Post-processing of the simulation results in the same house style | META's embedded Python |
+
+A spring defined once could then be rendered for the textbook, printed for the lab, meshed
+and simulated in LS-DYNA, and its simulated force-deflection curve compared with the
+measured one and with the formula in the chapter. Contributions of adapters are welcome.
 
 ## Things we learned the hard way
 

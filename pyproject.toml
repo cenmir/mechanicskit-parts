@@ -3,10 +3,10 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mechrender"
+name = "mechanicskit-parts"
 version = "0.1.0"
 authors = [{ name = "Mirza Cenanovic", email = "mirza.cenanovic@gmail.com" }]
-description = "Parametric machine-element geometry and Blender rendering for engineering teaching."
+description = "Parametric machine-element parts for teaching, with adapters for Blender and other engineering software."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -14,4 +14,4 @@ license = { text = "MIT" }
 dependencies = ["numpy>=1.20"]
 
 [tool.setuptools]
-packages = ["mechrender"]
+packages = ["mkparts"]

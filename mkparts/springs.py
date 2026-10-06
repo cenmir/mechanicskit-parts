@@ -1,5 +1,5 @@
-"""Springs as Blender objects: geometry from `mechrender.geometry`, solids from
-`mechrender.blender`. Runs inside Blender only. All sizes in millimetres.
+"""Springs as Blender objects: geometry from `mkparts.geometry`, solids from
+`mkparts.blender`. Runs inside Blender only. All sizes in millimetres.
 """
 from mathutils import Vector
 

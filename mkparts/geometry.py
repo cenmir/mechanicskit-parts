@@ -1,7 +1,7 @@
 """Parametric machine-element geometry as plain numpy arrays, in millimetres.
 
 Nothing here imports Blender, so the same centre lines and sections can be plotted with
-matplotlib, checked in a notebook, or handed to `mechrender.blender` to become solids.
+matplotlib, checked in a notebook, or handed to `mkparts.blender` to become solids.
 
 Springs are described the way a spring maker describes them: mean coil diameter D, wire
 diameter d, active coils n and pitch p. A wire is a centre line (an N x 3 array) that the

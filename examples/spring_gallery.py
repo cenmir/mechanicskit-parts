@@ -1,4 +1,4 @@
-"""A first MechRender scene: three spring types side by side.
+"""A first mechanicskit-parts scene: three spring types side by side.
 
     blender -b -P examples/spring_gallery.py -- [--preview] [--gpu] [--out DIR]
     bin/remote-render examples/spring_gallery.py              # on the GPU machine
@@ -11,11 +11,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 # The package sits next to this file on the render machine, one level up in the repo.
-sys.path[:0] = [str(HERE), str(HERE.parent), os.environ.get('MECHRENDER', '')]
+sys.path[:0] = [str(HERE), str(HERE.parent), os.environ.get('MKPARTS', '')]
 
-from mechrender import blender as mb  # noqa: E402
-from mechrender.blender import BLUE, RED  # noqa: E402
-from mechrender.springs import compression_spring, disc_spring, torsion_spring  # noqa: E402
+from mkparts import blender as mb  # noqa: E402
+from mkparts.blender import BLUE, RED  # noqa: E402
+from mkparts.springs import compression_spring, disc_spring, torsion_spring  # noqa: E402
 
 names, opts = mb.args()
 sc = mb.reset_scene(opts['preview'], res=(2400, 1200))

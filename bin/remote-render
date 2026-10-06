@@ -3,11 +3,11 @@
 #
 #   remote-render [-f FETCH_DIR] path/to/scene.py [script args...]
 #
-# Copies the script, every other .py file in its folder and the mechrender package to
+# Copies the script, every other .py file in its folder and the mkparts package to
 # %USERPROFILE%\render\<script name> on $RENDER_HOST, runs Blender there headless with
 # `-- <args> --gpu --out out`, and copies the job's out\ folder back to FETCH_DIR
 # (default ./out). The script must write its images under the --out folder, which
-# `mechrender.blender.args()` hands it.
+# `mkparts.blender.args()` hands it.
 #
 # Settings (environment):
 #   RENDER_HOST     ssh host name of the render machine           (default: euler)
@@ -21,14 +21,14 @@ script=$1; shift
 
 HOST=${RENDER_HOST:-euler}
 BLENDER=${RENDER_BLENDER:-'C:\Program Files\Blender Foundation\Blender 5.2\blender.exe'}
-PKG=$(cd "$(dirname "$0")/.." && pwd)/mechrender
+PKG=$(cd "$(dirname "$0")/.." && pwd)/mkparts
 SRC=$(cd "$(dirname "$script")" && pwd)
 JOB=$(basename "$script" .py)
 REMOTE="render\\$JOB"
 
-ssh "$HOST" "(if exist $REMOTE rmdir /s /q $REMOTE) & mkdir $REMOTE\\mechrender"
+ssh "$HOST" "(if exist $REMOTE rmdir /s /q $REMOTE) & mkdir $REMOTE\\mkparts"
 scp -q "$SRC"/*.py "$HOST:render/$JOB/"
-scp -q "$PKG"/*.py "$HOST:render/$JOB/mechrender/"
+scp -q "$PKG"/*.py "$HOST:render/$JOB/mkparts/"
 
 start=$(date +%s)
 ssh "$HOST" "cd $REMOTE && \"$BLENDER\" -b -P $JOB.py -- $* --gpu --out out" \
