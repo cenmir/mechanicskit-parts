@@ -295,12 +295,14 @@ def hex_nut(d, m_, s, z0, theta, clearance=0.06, dz=None):
 
 
 # ---------------------------------------------------------------- gears
-def spur_outline(N, m, phi_deg=20.0, n_flank=40, n_land=6):
-    """Closed outline of an involute spur gear in polar form, a tooth centred on theta = 0.
+def spur_tooth(N, m, phi_deg=20.0, n_flank=40, n_land=6, fillet=None):
+    """One tooth of an involute spur gear in polar form, (theta, r), centred on theta = 0 and
+    running from -pi/N (the middle of the space before it) towards +pi/N.
 
-    Returns (theta, r): theta rises monotonically over one turn from -pi/N, so the outline
-    is star-shaped and fits `radial_solid`. Below the base circle the flank continues as a
-    radial line (two points at the same theta), which keeps gears with few teeth valid.
+    N may be fractional, for the virtual spur gear of a bevel gear. Below the base circle the
+    flank continues as a radial line (two points at the same theta). `fillet` (mm) rounds the
+    corner where that line meets the root circle with an arc tangent to both; it needs a
+    root circle inside the base circle, about N < 42 at 20 degrees.
     """
     phi = np.radians(phi_deg)
     rp = m*N/2
@@ -316,36 +318,242 @@ def spur_outline(N, m, phi_deg=20.0, n_flank=40, n_land=6):
     r_fl, th_fl = r_inv[keep], half - th_inv[keep]                # left flank, root to tip, theta > 0
     if rf < rb:                                                    # radial line from the root to the base
         r_fl, th_fl = np.r_[rf, r_fl], np.r_[half, th_fl]
+    if fillet:
+        # circle of radius R tangent to the root circle and to the radial line theta = half:
+        # centre at radius rf + R, turned by delta into the space
+        R = fillet
+        r_t = np.sqrt(rf**2 + 2*rf*R)                             # where it leaves the radial line
+        if rf >= rb or r_t >= rb:
+            raise ValueError(f'a root fillet of {R} mm does not fit below the base circle of N = {N}')
+        delta = np.arcsin(R/(rf + R))
+        cx, cy = (rf + R)*np.cos(half + delta), (rf + R)*np.sin(half + delta)
+        a0 = np.arctan2(-cy, -cx)                                 # towards the root-circle tangent point
+        a1 = np.arctan2(r_t*np.sin(half) - cy, r_t*np.cos(half) - cx)
+        a1 = a0 + (a1 - a0 + np.pi) % (2*np.pi) - np.pi
+        a = np.linspace(a0, a1, 10)
+        xa, ya = cx + R*np.cos(a), cy + R*np.sin(a)
+        r_fl, th_fl = np.r_[np.hypot(xa, ya), r_fl[1:]], np.r_[np.arctan2(ya, xa), th_fl[1:]]
     th_tip = np.linspace(-th_fl[-1], th_fl[-1], n_land)[1:-1]
     th_root = np.linspace(th_fl[0], 2*np.pi/N - th_fl[0], n_land)[1:-1]
     th_one = np.r_[-th_fl, th_tip, th_fl[::-1], th_root]          # root, right flank, tip, left flank
     r_one = np.r_[r_fl, np.full(len(th_tip), ra), r_fl[::-1], np.full(len(th_root), rf)]
+    return th_one, r_one
+
+
+def spur_outline(N, m, phi_deg=20.0, n_flank=40, n_land=6, fillet=None):
+    """Closed outline of an involute spur gear in polar form, a tooth centred on theta = 0.
+
+    Returns (theta, r): theta rises monotonically over one turn from -pi/N, so the outline
+    is star-shaped and fits `radial_solid`. Below the base circle the flank continues as a
+    radial line (two points at the same theta), which keeps gears with few teeth valid;
+    `fillet` rounds its corner at the root (see `spur_tooth`).
+    """
+    th_one, r_one = spur_tooth(N, m, phi_deg, n_flank, n_land, fillet)
     pitch = 2*np.pi/N
     theta = np.concatenate([th_one + k*pitch for k in range(N)])
     radius = np.tile(r_one, N)
     return theta, radius
 
 
-def herringbone_gear(N, m, b, beta_deg, bore, phi_deg=20.0, n_z=24, chamfer=None):
-    """Herringbone gear: the spur outline of N teeth, module m, face width b (mm), twisted
-    by the helix angle beta in a V about the mid-plane, with a plain bore of diameter `bore`.
-
-    A section at height z is the spur outline turned by tan(beta)|z - b/2|/r_p, so each half
-    is a helical gear of opposite hand and the axial forces cancel. `chamfer` (mm) breaks
-    the tip edges at both faces. Returns vertices, faces and tags as `radial_solid`, with
-    the gear from z = 0 to b.
-    """
-    th, r = spur_outline(N, m, phi_deg)
+def _gear_solid(N, m, b, bore, twist, phi_deg, n_z, chamfer, fillet):
+    """Spur outline extruded over 0 <= z <= b and turned by twist(z) (radians at the pitch
+    circle); the bore is a diameter or a function r(theta) (a keyway, a keyhole) and is not
+    turned, so a keyway stays straight in a helical gear."""
+    th, r = spur_outline(N, m, phi_deg, fillet=fillet)
     rp = m*N/2
     z = np.unique(np.r_[np.linspace(0, b, n_z + 1), b/2])
     r_out = np.repeat(r[:, None], len(z), 1)
     if chamfer:
         e = np.minimum(z, b - z)[None, :]
         r_out = np.minimum(r_out, rp + m - chamfer + e)
-    r_in = np.full_like(r_out, bore/2)
-    verts, faces, tags = radial_solid(np.r_[th, th[0] + 2*np.pi], z,
-                                      np.r_[r_out, r_out[:1]], np.r_[r_in, r_in[:1]])
-    twist = np.tan(np.radians(beta_deg))*np.abs(verts[:, 2] - b/2)/rp
-    c, s = np.cos(twist), np.sin(twist)
-    verts = np.c_[c*verts[:, 0] - s*verts[:, 1], s*verts[:, 0] + c*verts[:, 1], verts[:, 2]]
+    th_c = np.r_[th, th[0] + 2*np.pi]
+    r_b = bore(th_c) if callable(bore) else np.full(len(th_c), bore/2)
+    r_in = np.repeat(np.asarray(r_b, float)[:, None], len(z), 1)
+    verts, faces, tags = radial_solid(th_c, z, np.r_[r_out, r_out[:1]], r_in)
+    n_out = len(verts)//2                                         # the toothed surface comes first
+    a = twist(verts[:n_out, 2])
+    c, s = np.cos(a), np.sin(a)
+    x, y = verts[:n_out, 0].copy(), verts[:n_out, 1].copy()
+    verts[:n_out, 0], verts[:n_out, 1] = c*x - s*y, s*x + c*y
     return verts, faces, tags
+
+
+def herringbone_gear(N, m, b, beta_deg, bore, phi_deg=20.0, n_z=24, chamfer=None, fillet=None):
+    """Herringbone gear: the spur outline of N teeth, module m, face width b (mm), twisted
+    by the helix angle beta in a V about the mid-plane, with a bore of diameter `bore` (or
+    a function r(theta), see `keyed_bore`).
+
+    A section at height z is the spur outline turned by tan(beta)|z - b/2|/r_p, so each half
+    is a helical gear of opposite hand and the axial forces cancel. `chamfer` (mm) breaks
+    the tip edges at both faces. Returns vertices, faces and tags as `radial_solid`, with
+    the gear from z = 0 to b.
+    """
+    k = np.tan(np.radians(beta_deg))/(m*N/2)
+    return _gear_solid(N, m, b, bore, lambda z: k*np.abs(z - b/2), phi_deg, n_z, chamfer, fillet)
+
+
+def helical_gear(N, m, b, beta_deg, bore, phi_deg=20.0, n_z=24, chamfer=None, fillet=None):
+    """Helical gear of N teeth, transverse module m, face width b and helix angle beta
+    (degrees; positive is right-hand), from z = 0 to b. beta = 0 is a spur gear. The bore
+    is a diameter or a function r(theta). Returns vertices, faces and tags."""
+    k = np.tan(np.radians(beta_deg))/(m*N/2)
+    return _gear_solid(N, m, b, bore, lambda z: k*(z - b/2), phi_deg, n_z, chamfer, fillet)
+
+
+def worm(m, q, starts, L, shaft_d, shaft_L=(0.0, 0.0), phi_deg=20.0, n_theta=400,
+         per_pitch=56):
+    """Cylindrical worm of axial module m, diameter quotient q (pitch diameter q m) and
+    `starts` threads over the length L, right-hand, from z = 0 to L, with plain shaft ends
+    of diameter `shaft_d` and lengths shaft_L = (below, above).
+
+    The axial section is the straight-sided rack of the wheel: thread thickness pi m/2 on
+    the pitch line, flanks at the pressure angle, addendum m, dedendum 1.25 m; over the
+    last pitch at each end the threads run out to the root. Returns vertices, faces and tags.
+    """
+    p = np.pi*m
+    lead = starts*p
+    r1 = q*m/2
+    ra, rf = r1 + m, r1 - 1.25*m
+    tphi = np.tan(np.radians(phi_deg))
+    th = theta_grid(n_theta)
+    lo, hi = shaft_L
+    zt = np.linspace(0, L, int(round(L/p*per_pitch)) + 1)
+    # each end plane appears twice, once for the shaft and once for the worm: a step
+    z = np.r_[np.linspace(-lo, 0, 6) if lo else [], zt, np.linspace(L, L + hi, 6) if hi else []]
+    on_shaft = np.r_[np.ones(6 if lo else 0, bool), np.zeros(len(zt), bool),
+                     np.ones(6 if hi else 0, bool)]
+    T, Z = np.meshgrid(th, z, indexing='ij')
+    u = np.mod(Z - lead*T/(2*np.pi) + p/2, p) - p/2              # axial phase from a thread centre
+    r = np.clip(r1 + (p/4 - np.abs(u))/tphi, rf, ra)
+    run = np.clip(np.minimum(Z, L - Z)/p, 0, 1)                   # runout over the end pitches
+    r = np.minimum(r, rf + (ra - rf)*run)
+    r = np.where(on_shaft[None, :], shaft_d/2, r)
+    return radial_solid(th, z, r)
+
+
+def bevel_gear(N, m, delta_deg, F, phi_deg=20.0, spiral_deg=0.0, depth=2.0, n_rho=24):
+    """Toothed shell of a bevel gear: N teeth, module m at the back (outer) end, pitch cone
+    angle delta, face width F along the cone, spiral angle `spiral_deg` at mid face (0 is
+    a straight bevel gear; positive is right-hand).
+
+    The axis is z, with the cone apex at the origin and the gear below it. At the cone
+    distance rho the teeth are the virtual spur gear of N/cos(delta) teeth (Tredgold's
+    approximation), scaled by rho/A0, set out along the normal to the pitch cone, so every
+    tooth line runs to the apex. The teeth stand on a shell `depth` modules deep below the
+    root; the body under it (hub, web, bore) is a separate part: see `bevel_point`.
+    A spiral tooth follows a logarithmic spiral on the pitch cone. Returns vertices, faces
+    and tags ('outer' teeth, 'inner' underside, 'end' back and front cones).
+    """
+    d = np.radians(delta_deg)
+    A0 = m*N/2/np.sin(d)                                          # outer cone distance
+    Nv = N/np.cos(d)
+    th_v, r_v = spur_tooth(Nv, m, phi_deg)
+    pitch = 2*np.pi/N
+    th = np.concatenate([th_v*np.cos(d)**-1 + k*pitch for k in range(N)])
+    # th_v spans 2 pi/Nv per tooth, which maps onto 2 pi/N
+    h = np.tile(r_v - m*Nv/2, N)                                  # height above the pitch cone
+    rho = np.linspace(A0 - F, A0, n_rho + 1)
+    R0 = 10*m*(depth + 2)                                         # keeps the stand-in radius positive
+    th_c = np.r_[th, th[0] + 2*np.pi]
+    r_out = np.repeat(np.r_[h, h[:1]][:, None] + R0, len(rho), 1)
+    r_in = np.full_like(r_out, R0 - (1.25 + depth)*m)
+    verts, faces, tags = radial_solid(th_c, rho, r_out, r_in)
+    a = np.arctan2(verts[:, 1], verts[:, 0])
+    hh, rr = np.hypot(verts[:, 0], verts[:, 1]) - R0, verts[:, 2]
+    a = a + np.tan(np.radians(spiral_deg))*np.log(rr/(A0 - F/2))/np.sin(d)
+    verts = bevel_point(rr, hh*rr/A0, a, d)
+    return verts, faces, tags
+
+
+def bevel_point(rho, h, theta, delta):
+    """Point at the cone distance rho from the apex (origin) of a cone of half angle delta
+    (radians) about -z, raised h along the cone's outward normal, at the angle theta."""
+    rho, h, theta = np.broadcast_arrays(rho, h, theta)
+    rad = rho*np.sin(delta) + h*np.cos(delta)
+    z = -rho*np.cos(delta) + h*np.sin(delta)
+    return np.stack([rad*np.cos(theta), rad*np.sin(theta), z], -1)
+
+
+# ---------------------------------------------------------------- bores, keyways, keyholes
+def convex_exit(theta, poly):
+    """Distance along the ray from the origin at the angle theta to where it leaves the
+    convex polygon `poly` (k x 2, counter-clockwise), which holds the origin inside or on
+    an edge; 0 for rays that point away from it."""
+    d = np.stack([np.cos(theta), np.sin(theta)], -1)
+    p0 = np.asarray(poly, float)
+    e = np.roll(p0, -1, 0) - p0
+    nrm = np.stack([e[:, 1], -e[:, 0]], -1)                       # outward edge normals
+    num, den = (nrm*p0).sum(1), d @ nrm.T
+    with np.errstate(divide='ignore', invalid='ignore'):
+        t = np.where(den > 1e-12, num/den, np.inf).min(1)
+    return np.where(np.isfinite(t), np.maximum(t, 0), 0.0)
+
+
+def convex_entry(theta, poly):
+    """Distance along the ray from the origin at the angle theta to where it enters the
+    convex polygon `poly` (counter-clockwise) outside the origin; inf where it misses."""
+    d = np.stack([np.cos(theta), np.sin(theta)], -1)
+    p0 = np.asarray(poly, float)
+    e = np.roll(p0, -1, 0) - p0
+    nrm = np.stack([e[:, 1], -e[:, 0]], -1)
+    num, den = (nrm*p0).sum(1), d @ nrm.T
+    with np.errstate(divide='ignore', invalid='ignore'):
+        q = num/den
+        t_in = np.where(den < -1e-12, q, -np.inf).max(1)
+        t_out = np.where(den > 1e-12, q, np.inf).min(1)
+    t_in = np.maximum(t_in, 0)
+    return np.where(t_in <= t_out, t_in, np.inf)
+
+
+def keyed_bore(d, b, t2):
+    """r(theta) of a hub bore of diameter d with a keyway of width b and depth t2 (above
+    the bore, at its edge) on the +x side."""
+    rect = [(0, -b/2), (d/2 + t2, -b/2), (d/2 + t2, b/2), (0, b/2)]
+    return lambda th: np.maximum(d/2, convex_exit(np.asarray(th, float), rect))
+
+
+def keyseat_radius(theta, d, b, t1):
+    """Radius of a shaft of diameter d with a keyseat of width b and depth t1 on the +x side."""
+    rect = [(d/2 - t1, -b/2), (2*d, -b/2), (2*d, b/2), (d/2 - t1, b/2)]
+    return np.minimum(d/2, convex_entry(np.asarray(theta, float), rect))
+
+
+def keyed_shaft(d, L, b, t1, z0, z1, chamfer=1.0, n=240):
+    """Shaft of diameter d from z = 0 to L with a keyseat of width b and depth t1 on the +x
+    side between z0 and z1 (flat ends), and chamfered ends. Returns vertices, faces, tags."""
+    th = theta_grid(n, corners=[np.arcsin(b/d), -np.arcsin(b/d),
+                                np.arctan2(b/2, d/2 - t1), -np.arctan2(b/2, d/2 - t1)])
+    r_k = keyseat_radius(th, d, b, t1)[:, None]
+    z = np.r_[0, chamfer, z0, z0, z1, z1, L - chamfer, L]
+    r = np.repeat(np.full(len(z), d/2)[None, :], len(th), 0)
+    r[:, [0, -1]] = d/2 - chamfer
+    r[:, 3:5] = r_k
+    return radial_solid(th, z, r)
+
+
+def keyhole(a, w1, w2, L):
+    """r(theta) of a keyhole: a circle of radius a with a slot from width w1 at the centre to
+    w2 at the distance L on the -y side."""
+    trap = [(-w1/2, 0), (-w2/2, -L), (w2/2, -L), (w1/2, 0)]
+    return lambda th: np.maximum(a, convex_exit(np.asarray(th, float), trap))
+
+
+def ribbon(path, w):
+    """Closed polygon of a band of width w along the open polyline `path` (k x 2): one
+    side out, the other back. For spokes and other flat bands extruded with `prism`."""
+    path = np.asarray(path, float)
+    t = np.gradient(path, axis=0)
+    t /= np.linalg.norm(t, axis=1)[:, None]
+    n = np.c_[-t[:, 1], t[:, 0]]
+    return np.r_[path + w/2*n, (path - w/2*n)[::-1]]
+
+
+def prism(poly, z0, z1):
+    """Vertices, faces and tags of the straight prism over the simple polygon `poly` from
+    z0 to z1: two n-gon ends ('end') and a quad per edge ('outer')."""
+    poly = np.asarray(poly, float)
+    k = len(poly)
+    verts = np.r_[np.c_[poly, np.full(k, z0)], np.c_[poly, np.full(k, z1)]]
+    faces = [tuple(range(k)), tuple(range(2*k - 1, k - 1, -1))]
+    faces += [(i, (i + 1) % k, k + (i + 1) % k, k + i) for i in range(k)]
+    return verts, faces, ['end', 'end'] + ['outer']*k

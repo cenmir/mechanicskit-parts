@@ -1,3 +1,4 @@
 out/
 __pycache__/
 *.blend1
+*.egg-info/

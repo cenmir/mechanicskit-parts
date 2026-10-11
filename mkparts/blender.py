@@ -14,6 +14,7 @@ import bmesh
 import bpy
 import numpy as np
 from mathutils import Vector
+from . import geometry
 
 MM = 1e-3
 
@@ -365,3 +366,31 @@ def box(name, size, z, mat, location=(0, 0), bevel=0.6):
     bev.width, bev.segments = bevel*MM, 3
     ob.data.materials.append(mat)
     return ob
+
+
+# ---------------------------------------------------------------- moving assemblies
+def pivot(name, loc, rot=(0, 0, 0)):
+    """An empty at the gear centre (mm); the gear's parts are its children, built about the
+    origin with the axis along z, and the gear turns by turning the empty about its z."""
+    em = bpy.data.objects.new(name, None)
+    bpy.context.collection.objects.link(em)
+    em.location = tuple(np.asarray(loc)*MM)
+    em.rotation_mode = 'ZYX'                     # the spin about z comes first, in the gear's own frame
+    em.rotation_euler = rot
+    return em
+
+
+def adopt(parent, *obs, turn=0.0):
+    """Make obs children of the pivot, all turned by `turn` about its axis: a whole number
+    of tooth pitches brings the key round to face the camera and leaves the mesh as it is."""
+    for ob in obs:
+        ob.parent = parent
+        ob.rotation_euler.z = turn
+    return parent
+
+
+def paint_stripe(name, r0, r1, w, z, mat):
+    """A stripe of paint w wide on the face z of a part, along +x from r0 to r1 (mm), such
+    as a radius painted on a gear: parent it to the gear's pivot and it turns with it."""
+    v, f, t = geometry.prism(geometry.ribbon([(r0, 0), (r1, 0)], w), z - 0.05, z + 0.12)
+    return tagged_object(name, v, f, t, {'outer': mat}, smooth_angle=40)

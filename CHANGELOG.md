@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.0] - 2026-10-11
+
+### Added
+
+- `geometry`: `spur_tooth` (one involute tooth, fractional N allowed) with an optional
+  root fillet, also through `spur_outline(fillet=...)`; `helical_gear`; the cylindrical
+  `worm`; the spiral or straight `bevel_gear` shell on Tredgold's virtual spur gear, with
+  `bevel_point`; bores and shafts with keys (`keyed_bore`, `keyseat_radius`,
+  `keyed_shaft`), a `keyhole`, and flat parts (`ribbon`, `prism`) from the ray helpers
+  `convex_exit` and `convex_entry`.
+- `gears`: helical gears, worms, bevel gear shells and their bodies (`bevel_body`), and
+  a shaft with a parallel key (`keyed_shaft`), as Blender objects.
+- `blender`: `pivot` and `adopt`, an empty that turns a gear with its shaft and key about
+  the gear's own axis; `paint_stripe`, a painted radius that turns with it.
+
+### Changed
+
+- `geometry.herringbone_gear` takes a bore function as well as a diameter, and a
+  `fillet`; the bore is no longer twisted with the teeth.
+
 ## [0.2.0] - 2026-10-11
 
 ### Added
