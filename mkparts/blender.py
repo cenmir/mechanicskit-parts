@@ -10,6 +10,7 @@ Geometry is given in millimetres, as in `mkparts.geometry`, and converted to met
 import sys
 from pathlib import Path
 
+import bmesh
 import bpy
 import numpy as np
 from mathutils import Vector
@@ -176,6 +177,38 @@ def material(name, color, metallic=1.0, roughness=0.28, coat=0.0):
     return m
 
 
+def hatched(name, base=(0.5, 0.5, 0.52), ink=(0.05, 0.05, 0.06), spacing=1.2, width=0.16,
+            direction=(1, 1, 1)):
+    """A matte section material with hatching, as on a drawing: lines `spacing` mm apart.
+
+    The lines are the levels of dot(position, direction) in world space, so a direction
+    (1, 1, 1) hatches the planes y = 0 and x = 0 both at 45 degrees; (-1, -1, 1) hatches
+    them the other way, for the neighbouring part.
+    """
+    m = material(name, base, metallic=0.0, roughness=0.7)
+    nt = m.node_tree
+    pos = nt.nodes.new('ShaderNodeNewGeometry')
+    dot = nt.nodes.new('ShaderNodeVectorMath')
+    dot.operation = 'DOT_PRODUCT'
+    dot.inputs[1].default_value = tuple(np.asarray(direction)/np.linalg.norm(direction))
+    nt.links.new(pos.outputs['Position'], dot.inputs[0])
+    ops = []
+    for op, val in (('DIVIDE', spacing*MM), ('FRACT', None), ('LESS_THAN', width)):
+        node = nt.nodes.new('ShaderNodeMath')
+        node.operation = op
+        if val is not None:
+            node.inputs[1].default_value = val
+        nt.links.new((ops[-1].outputs[0] if ops else dot.outputs['Value']), node.inputs[0])
+        ops.append(node)
+    mix = nt.nodes.new('ShaderNodeMix')
+    mix.data_type = 'RGBA'
+    mix.inputs['A'].default_value = (*base, 1)
+    mix.inputs['B'].default_value = (*ink, 1)
+    nt.links.new(ops[-1].outputs[0], mix.inputs['Factor'])
+    nt.links.new(mix.outputs['Result'], nt.nodes['Principled BSDF'].inputs['Base Color'])
+    return m
+
+
 def steel(name='Steel', roughness=0.3):
     return bpy.data.materials.get(name) or material(name, (0.62, 0.62, 0.64), roughness=roughness)
 
@@ -183,6 +216,43 @@ def steel(name='Steel', roughness=0.3):
 def painted(color, name='Paint'):
     """Powder coat: a coloured dielectric under a clear coat."""
     return material(name, color, metallic=0.0, roughness=0.4, coat=0.5)
+
+
+def heat_steel(name='HotSteel', glow=(1.0, 0.12, 0.01), tint=(0.30, 0.07, 0.02), strength=1.2):
+    """Steel whose temperature is shown by colour, for heating and cooling animations.
+
+    The node 'Heat' (a Value from 0 to 1) blends the bare steel towards a temper tint and
+    adds an orange glow; keyframe `heat_node(m).outputs[0].default_value`. The colour is a
+    cue for the reader, not physics: steel at 200 degrees C does not glow.
+    """
+    m = material(name, (0.62, 0.62, 0.64), roughness=0.3)
+    nt = m.node_tree
+    bsdf = nt.nodes['Principled BSDF']
+    heat = nt.nodes.new('ShaderNodeValue')
+    heat.name = heat.label = 'Heat'
+    heat.outputs[0].default_value = 0.0
+    mix = nt.nodes.new('ShaderNodeMix')
+    mix.data_type = 'RGBA'
+    mix.inputs['A'].default_value = (0.62, 0.62, 0.64, 1)
+    mix.inputs['B'].default_value = (*tint, 1)
+    nt.links.new(heat.outputs[0], mix.inputs['Factor'])
+    nt.links.new(mix.outputs['Result'], bsdf.inputs['Base Color'])
+    bsdf.inputs['Emission Color'].default_value = (*glow, 1)
+    k = nt.nodes.new('ShaderNodeMath')
+    k.operation = 'POWER'                                  # the glow comes late in the heating
+    k.inputs[1].default_value = 2.0
+    nt.links.new(heat.outputs[0], k.inputs[0])
+    s = nt.nodes.new('ShaderNodeMath')
+    s.operation = 'MULTIPLY'
+    s.inputs[1].default_value = strength
+    nt.links.new(k.outputs[0], s.inputs[0])
+    nt.links.new(s.outputs[0], bsdf.inputs['Emission Strength'])
+    return m
+
+
+def heat_node(m):
+    """The 'Heat' value node of a heat_steel material."""
+    return m.node_tree.nodes['Heat']
 
 
 def dark_plate(name='Plate'):
@@ -250,6 +320,37 @@ def mesh(name, verts, faces, mat, smooth=False, bevel=None):
     ob.data.materials.append(mat)
     for f in me.polygons:
         f.use_smooth = smooth
+    return ob
+
+
+def tagged_object(name, verts, faces, tags, mats, location=(0, 0, 0), smooth_angle=20):
+    """A mesh object from vertices (mm), faces and a tag per face, e.g. from
+    geometry.radial_solid. `mats` maps a tag to a material; missing tags use 'outer'.
+
+    Curved faces are smooth shaded; edges sharper than `smooth_angle` degrees (hexagon
+    corners, chamfers, tooth tips, cut faces) stay sharp.
+    """
+    me = bpy.data.meshes.new(name)
+    me.from_pydata([tuple(v) for v in np.asarray(verts)*MM], [], faces)
+    me.validate()
+    order = list(dict.fromkeys(mats.get(t, mats['outer']) for t in ('outer', 'inner', 'end', 'cut')))
+    for mat in order:
+        me.materials.append(mat)
+    idx = [order.index(mats.get(t, mats['outer'])) for t in tags]
+    me.polygons.foreach_set('material_index', idx)
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_edges], context='VERTS')
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(me)
+    bm.free()
+    ob = bpy.data.objects.new(name, me)
+    bpy.context.collection.objects.link(ob)
+    ob.location = tuple(np.asarray(location)*MM)
+    flat = {'end', 'cut'}                                   # plane faces: no shading seams
+    me.polygons.foreach_set('use_smooth', [t not in flat for t in tags])
+    mod = ob.modifiers.new('sharp', 'EDGE_SPLIT')
+    mod.split_angle = np.radians(smooth_angle)
     return ob
 
 
