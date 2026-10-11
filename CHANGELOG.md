@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1] - 2026-10-11
+
+### Changed
+
+- `gears.bevel_body` takes `hub_side` ('front' or 'back'), so the side gears of a
+  differential can carry their hub outwards while their cone is that of a wheel.
+
 ## [0.3.0] - 2026-10-11
 
 ### Added

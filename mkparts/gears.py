@@ -56,9 +56,12 @@ def keyed_shaft(name, d, b_key, h_key, z0, z1, mats, key_mat, key_z=None):
     return shaft, key
 
 
-def bevel_body(name, N, m, delta_deg, F, depth, d_bore, bk, hk, hub, mats):
+def bevel_body(name, N, m, delta_deg, F, depth, d_bore, bk, hk, hub, mats, hub_side=None):
     """The body under a bevel gear's toothed shell: it fills the inner cone of the shell
-    from the back to the front end and carries a hub (r, length) with a keyed bore."""
+    from the back to the front end and carries a hub (r, length) with a keyed bore. The hub
+    stands on the front, towards the apex ('front', the default for a wheel, delta > 45°)
+    or on the back ('back', the default for a pinion, and for the side gears of a
+    differential, whose apex is taken by the other gears)."""
     d = np.radians(delta_deg)
     A0 = m*N/2/np.sin(d)
     h_in = -(1.25 + depth)*m
@@ -68,9 +71,14 @@ def bevel_body(name, N, m, delta_deg, F, depth, d_bore, bk, hk, hub, mats):
     R_b, z_b, R_f, z_f = back[0] - 0.2, back[2] - 0.2, front[0] - 0.2, front[2] - 0.2
     r_hub, l_hub = hub
     th = geo.theta_grid(360)
-    if delta_deg > 45:                                             # a wheel: disc below, hub above
+    if hub_side is None:
+        hub_side = 'front' if delta_deg > 45 else 'back'
+    if hub_side == 'front':                                        # a wheel: disc below, hub above
         z = [z_b - 6, z_b, z_f, z_f, z_f + l_hub]
         r = [R_b, R_b, R_f, r_hub, r_hub]
+    elif delta_deg > 45:                                           # a flat gear with its hub behind
+        z = [z_b - 6 - l_hub, z_b - 6, z_b - 6, z_b, z_f]
+        r = [r_hub, r_hub, R_b, R_b, R_f]
     else:                                                          # a pinion: hub behind
         z = [z_b - l_hub, z_b, z_b, z_f]
         r = [r_hub, r_hub, R_b, R_f]
