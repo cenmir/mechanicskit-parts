@@ -4,4 +4,4 @@
 program's Python and are imported explicitly there: `mkparts.blender` and `mkparts.springs`
 need Blender's `bpy`.
 """
-__version__ = '0.3.1'
+__version__ = '0.3.2'

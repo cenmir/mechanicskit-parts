@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2] - 2026-10-11
+
+### Added
+
+- `geometry.helical_gear` and `gears.helical_gear` take `z_cut`: the gear cut across its
+  thickness at that depth, the section tagged 'cut' (a spur outline turned by the helix).
+
 ## [0.3.1] - 2026-10-11
 
 ### Changed

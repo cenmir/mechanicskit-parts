@@ -355,13 +355,16 @@ def spur_outline(N, m, phi_deg=20.0, n_flank=40, n_land=6, fillet=None):
     return theta, radius
 
 
-def _gear_solid(N, m, b, bore, twist, phi_deg, n_z, chamfer, fillet):
+def _gear_solid(N, m, b, bore, twist, phi_deg, n_z, chamfer, fillet, z_cut=None):
     """Spur outline extruded over 0 <= z <= b and turned by twist(z) (radians at the pitch
     circle); the bore is a diameter or a function r(theta) (a keyway, a keyhole) and is not
-    turned, so a keyway stays straight in a helical gear."""
+    turned, so a keyway stays straight in a helical gear. With z_cut the gear ends at that
+    height, a section, and the faces there are tagged 'cut'."""
     th, r = spur_outline(N, m, phi_deg, fillet=fillet)
     rp = m*N/2
     z = np.unique(np.r_[np.linspace(0, b, n_z + 1), b/2])
+    if z_cut is not None:
+        z = np.unique(np.r_[z[z < z_cut - 1e-9], z_cut])
     r_out = np.repeat(r[:, None], len(z), 1)
     if chamfer:
         e = np.minimum(z, b - z)[None, :]
@@ -375,6 +378,9 @@ def _gear_solid(N, m, b, bore, twist, phi_deg, n_z, chamfer, fillet):
     c, s = np.cos(a), np.sin(a)
     x, y = verts[:n_out, 0].copy(), verts[:n_out, 1].copy()
     verts[:n_out, 0], verts[:n_out, 1] = c*x - s*y, s*x + c*y
+    if z_cut is not None:
+        tags = ['cut' if t == 'end' and np.allclose(verts[list(f), 2], z_cut) else t
+                for f, t in zip(faces, tags)]
     return verts, faces, tags
 
 
@@ -392,12 +398,16 @@ def herringbone_gear(N, m, b, beta_deg, bore, phi_deg=20.0, n_z=24, chamfer=None
     return _gear_solid(N, m, b, bore, lambda z: k*np.abs(z - b/2), phi_deg, n_z, chamfer, fillet)
 
 
-def helical_gear(N, m, b, beta_deg, bore, phi_deg=20.0, n_z=24, chamfer=None, fillet=None):
+def helical_gear(N, m, b, beta_deg, bore, phi_deg=20.0, n_z=24, chamfer=None, fillet=None,
+                 z_cut=None):
     """Helical gear of N teeth, transverse module m, face width b and helix angle beta
     (degrees; positive is right-hand), from z = 0 to b. beta = 0 is a spur gear. The bore
-    is a diameter or a function r(theta). Returns vertices, faces and tags."""
+    is a diameter or a function r(theta). `z_cut` cuts the gear at that height, keeping
+    0 <= z <= z_cut: the section shows the spur outline turned by the helix. Returns
+    vertices, faces and tags ('cut' on the section)."""
     k = np.tan(np.radians(beta_deg))/(m*N/2)
-    return _gear_solid(N, m, b, bore, lambda z: k*(z - b/2), phi_deg, n_z, chamfer, fillet)
+    return _gear_solid(N, m, b, bore, lambda z: k*(z - b/2), phi_deg, n_z, chamfer, fillet,
+                       z_cut)
 
 
 def worm(m, q, starts, L, shaft_d, shaft_L=(0.0, 0.0), phi_deg=20.0, n_theta=400,

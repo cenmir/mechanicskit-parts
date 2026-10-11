@@ -15,10 +15,12 @@ def herringbone_gear(name, N, m, b, beta, bore, mats, location=(0, 0, 0), phi_de
 
 
 def helical_gear(name, N, m, b, beta, bore, mats, location=(0, 0, 0), phi_deg=20.0,
-                 chamfer=None, n_z=24):
+                 chamfer=None, n_z=24, z_cut=None):
     """A helical gear (beta in degrees, 0 for a spur gear) with a bore that is a diameter
-    or a function r(theta) such as `geometry.keyed_bore`."""
-    verts, faces, tags = geo.helical_gear(N, m, b, beta, bore, phi_deg, n_z, chamfer)
+    or a function r(theta) such as `geometry.keyed_bore`; `z_cut` cuts it there, the
+    section taking mats['cut']."""
+    verts, faces, tags = geo.helical_gear(N, m, b, beta, bore, phi_deg, n_z, chamfer,
+                                          z_cut=z_cut)
     return tagged_object(name, verts, faces, tags, mats, location, smooth_angle=25)
 
 
