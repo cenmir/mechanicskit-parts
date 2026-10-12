@@ -32,6 +32,7 @@ that looks about right.
 | `mkparts.springs` | Blender | Springs as objects: sweeps a wire along a centre line, grinds the ends flat, revolves disc springs. |
 | `mkparts.fasteners` | Blender | Bolts, nuts and clamped plates from `geometry.radial_solid`: the ISO 68-1 thread on a true helix, hexagon heads and nuts with chamfers, whole parts or sections with flat cut faces. |
 | `mkparts.gears` | Blender | Spur, helical and herringbone gears from `geometry.spur_outline` (involute, optional root fillet), cylindrical worms, spiral bevel gears (`bevel_gear` teeth on Tredgold's virtual spur gear, `bevel_body` under them), and shafts with a parallel key; bores may carry a keyway or a keyhole. `blender.pivot` and `blender.adopt` turn a gear with its shaft about its own axis, and `blender.paint_stripe` paints a radius on it. `blender.heat_steel` shows a part's temperature by colour for heating and cooling animations. |
+| `mkparts.geometry` (couplings) | any Python with numpy | Parts of shaft couplings: the fork and cross of a Hooke joint, ISO 4156 spline shafts and hubs, the bell of a ball joint, jaw hubs and spiders, with `merge`, `place`, `cylinder`, `slot`. |
 | `bin/remote-render` | your shell | Renders a script on a remote GPU machine over ssh and copies the images back. |
 
 The split is deliberate. The geometry is ordinary numpy, so the same centre line can be

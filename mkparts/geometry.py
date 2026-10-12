@@ -295,18 +295,20 @@ def hex_nut(d, m_, s, z0, theta, clearance=0.06, dz=None):
 
 
 # ---------------------------------------------------------------- gears
-def spur_tooth(N, m, phi_deg=20.0, n_flank=40, n_land=6, fillet=None):
+def spur_tooth(N, m, phi_deg=20.0, n_flank=40, n_land=6, fillet=None, ha=1.0, hf=1.25):
     """One tooth of an involute spur gear in polar form, (theta, r), centred on theta = 0 and
     running from -pi/N (the middle of the space before it) towards +pi/N.
 
     N may be fractional, for the virtual spur gear of a bevel gear. Below the base circle the
     flank continues as a radial line (two points at the same theta). `fillet` (mm) rounds the
     corner where that line meets the root circle with an arc tangent to both; it needs a
-    root circle inside the base circle, about N < 42 at 20 degrees.
+    root circle inside the base circle, about N < 42 at 20 degrees. The addendum and
+    dedendum are ha*m and hf*m, 1 and 1.25 for a gear; a 30 degree flat-root spline shaft
+    of ISO 4156 has 0.5 and 0.75.
     """
     phi = np.radians(phi_deg)
     rp = m*N/2
-    rb, ra, rf = rp*np.cos(phi), rp + m, rp - 1.25*m
+    rb, ra, rf = rp*np.cos(phi), rp + ha*m, rp - hf*m
     t_tip = np.sqrt((ra/rb)**2 - 1)
     t = np.linspace(0, t_tip, n_flank)
     x, y = rb*(np.sin(t) - t*np.cos(t)), rb*(np.cos(t) + t*np.sin(t))
@@ -340,7 +342,7 @@ def spur_tooth(N, m, phi_deg=20.0, n_flank=40, n_land=6, fillet=None):
     return th_one, r_one
 
 
-def spur_outline(N, m, phi_deg=20.0, n_flank=40, n_land=6, fillet=None):
+def spur_outline(N, m, phi_deg=20.0, n_flank=40, n_land=6, fillet=None, ha=1.0, hf=1.25):
     """Closed outline of an involute spur gear in polar form, a tooth centred on theta = 0.
 
     Returns (theta, r): theta rises monotonically over one turn from -pi/N, so the outline
@@ -348,7 +350,7 @@ def spur_outline(N, m, phi_deg=20.0, n_flank=40, n_land=6, fillet=None):
     radial line (two points at the same theta), which keeps gears with few teeth valid;
     `fillet` rounds its corner at the root (see `spur_tooth`).
     """
-    th_one, r_one = spur_tooth(N, m, phi_deg, n_flank, n_land, fillet)
+    th_one, r_one = spur_tooth(N, m, phi_deg, n_flank, n_land, fillet, ha, hf)
     pitch = 2*np.pi/N
     theta = np.concatenate([th_one + k*pitch for k in range(N)])
     radius = np.tile(r_one, N)
@@ -567,3 +569,128 @@ def prism(poly, z0, z1):
     faces = [tuple(range(k)), tuple(range(2*k - 1, k - 1, -1))]
     faces += [(i, (i + 1) % k, k + (i + 1) % k, k + i) for i in range(k)]
     return verts, faces, ['end', 'end'] + ['outer']*k
+
+
+# ---------------------------------------------------------------- couplings: simple solids and their assembly
+def merge(*parts):
+    """One (verts, faces, tags) from several, e.g. a shaft, a plate and two ears of a fork."""
+    verts, faces, tags, k = [], [], [], 0
+    for v, f, t in parts:
+        verts.append(np.asarray(v, float))
+        faces += [tuple(i + k for i in face) for face in f]
+        tags += list(t)
+        k += len(v)
+    return np.concatenate(verts), faces, tags
+
+
+def place(part, R=np.eye(3), t=(0, 0, 0)):
+    """The part turned by the matrix R and moved by t: its vertices become R v + t."""
+    v, f, tg = part
+    return np.asarray(v, float) @ np.asarray(R).T + np.asarray(t, float), f, tg
+
+
+def cylinder(r, z0, z1, r_in=None, n=96):
+    """A cylinder or tube about the z axis from z0 to z1, as (verts, faces, tags)."""
+    th = theta_grid(n)
+    z = np.array([z0, z1], float)
+    r_out = np.full((len(th), 2), float(r))
+    r_i = None if r_in is None else np.full((len(th), 2), float(r_in))
+    return radial_solid(th, z, r_out, r_i)
+
+
+def slot(w, L, n=24):
+    """Closed polygon of a flat bar w wide with round ends, its end centres at (0, 0) and
+    (L, 0): a link, or the ear of a fork with the pin at its centre."""
+    a = np.linspace(-np.pi/2, np.pi/2, n)
+    right = np.c_[L + w/2*np.cos(a), w/2*np.sin(a)]
+    left = np.c_[-w/2*np.cos(a), -w/2*np.sin(a)]
+    return np.r_[right, left]
+
+
+def annular_sector(r0, r1, a0, a1, n=16):
+    """Closed polygon of the ring sector r0 <= r <= r1, a0 <= theta <= a1 (radians): a jaw."""
+    a = np.linspace(a0, a1, n)
+    return np.r_[np.c_[r1*np.cos(a), r1*np.sin(a)], np.c_[r0*np.cos(a[::-1]), r0*np.sin(a[::-1])]]
+
+
+# axes permutation: a prism built over the (y, z) plane and extruded along x
+YZX = np.array([[0, 0, 1], [1, 0, 0], [0, 1, 0]], float)
+
+
+def fork(d_shaft, L_shaft, a, t, w, c, d_hub=None):
+    """The fork (yoke) of a Hooke joint with the pin axis along x through the origin and the
+    shaft along -z. Two ears of thickness t and width w stand at |x| = a .. a + t, rounded
+    about the pin; they rise from a base plate at z = -c; the shaft of diameter d_shaft
+    and length L_shaft continues below a hub of diameter d_hub."""
+    d_hub = d_hub or 1.6*d_shaft
+    a_ = np.linspace(0, np.pi, 24)                     # the ear in (y, z), round above the pin
+    poly = np.r_[[[w/2, -c]], np.c_[w/2*np.cos(a_), w/2*np.sin(a_)], [[-w/2, -c]]]
+    parts = [place(prism(poly, x0, x0 + t), YZX) for x0 in (a, -a - t)]
+    plate = prism([(-a - t, -w/2), (a + t, -w/2), (a + t, w/2), (-a - t, w/2)], -c - t, -c)
+    parts += [plate, cylinder(d_hub/2, -c - t - 0.8*d_shaft, -c - t + 0.1),
+              cylinder(d_shaft/2, -c - t - 0.8*d_shaft - L_shaft, -c - t - 0.8*d_shaft + 0.1)]
+    return merge(*parts)
+
+
+def cross(a, t, d_pin, d_body=None):
+    """The cross (spider) of a Hooke joint: arms of diameter d_pin along x and y reaching
+    through ears at |r| = a .. a + t, on a cube of side d_body at the centre."""
+    s = d_body or 1.5*d_pin
+    L = a + t + 1.0
+    arm_x = place(cylinder(d_pin/2, -L, L), YZX)
+    arm_y = place(cylinder(d_pin/2, -L, L), YZX.T)
+    body = prism([(-s/2, -s/2), (s/2, -s/2), (s/2, s/2), (-s/2, s/2)], -s/2, s/2)
+    return merge(arm_x, arm_y, body)
+
+
+def spline_bore(N, m, phi_deg=30.0, clearance=0.05):
+    """r(theta) of the bore of a hub with an internal involute spline of ISO 4156, flat root,
+    that mates with `spline_shaft(N, m)`: its spaces sit where the shaft's teeth are, from the
+    minor diameter m(N - 1) to the major diameter m(N + 1.5)."""
+    th, r = spur_outline(N, m, phi_deg, n_flank=30, n_land=8, ha=0.75, hf=0.5)
+    th, r = np.r_[th - 2*np.pi, th, th + 2*np.pi], np.tile(r, 3) + clearance
+    return lambda t: np.interp(np.mod(np.asarray(t, float) + np.pi/N, 2*np.pi) - np.pi/N, th, r)
+
+
+def spline_shaft(N, m, z0, z1, phi_deg=30.0, n_theta=None):
+    """An external involute spline of ISO 4156, 30 degrees, flat root, along z0..z1: N
+    teeth of module m between the minor diameter m(N - 1.5) and the major m(N + 1)."""
+    th, r = spur_outline(N, m, phi_deg, n_flank=30, n_land=8, ha=0.5, hf=0.75)
+    th_c = np.r_[th, th[0] + 2*np.pi]
+    r_c = np.r_[r, r[0]]
+    z = np.array([z0, z1], float)
+    return radial_solid(th_c, z, np.repeat(r_c[:, None], 2, 1))
+
+
+def spherical_shell(R_in, R_out, z0, z1, a0=0.0, a1=2*np.pi, n_theta=96, n_z=40):
+    """The part of a spherical shell R_in <= |x| <= R_out between the planes z0 and z1 (the
+    bell of a ball joint), over the angles a0..a1 about z: an open range cuts it open."""
+    z = np.linspace(z0, z1, n_z)
+    th = np.linspace(a0, a1, n_theta + 1)
+    r_out = np.sqrt(np.maximum(R_out**2 - z**2, 0.0)) + 1e-3
+    r_in = np.sqrt(np.maximum(R_in**2 - z**2, 0.0)) + 1e-3
+    return radial_solid(th, z, np.repeat(r_out[None, :], len(th), 0),
+                        np.repeat(r_in[None, :], len(th), 0))
+
+
+def jaw_hub(d_hub, L_hub, r0, r1, h_jaw, n_jaws=3, jaw_frac=0.5, bore=None):
+    """A hub of a jaw coupling: a cylinder of diameter d_hub from z = -L_hub to 0 with
+    n_jaws jaws (ring sectors r0..r1, jaw_frac of the pitch wide) standing h_jaw above it;
+    the first jaw is centred on +x."""
+    w = 2*np.pi/n_jaws*jaw_frac
+    parts = [cylinder(d_hub/2, -L_hub, 0.05, r_in=None if bore is None else bore/2)]
+    for k in range(n_jaws):
+        a = 2*np.pi*k/n_jaws
+        parts.append(prism(annular_sector(r0, r1, a - w/2, a + w/2), 0.0, h_jaw))
+    return merge(*parts)
+
+
+def spider(r0, r1, h, n_arms=6, arm_frac=0.5, r_core=None):
+    """The elastomer spider between the jaws: n_arms ring sectors r0..r1 joined by a core
+    ring, h thick, the first arm centred on +x."""
+    w = 2*np.pi/n_arms*arm_frac
+    parts = [cylinder(r_core or r0 + 0.25*(r1 - r0), 0.0, h, r_in=r0)]
+    for k in range(n_arms):
+        a = 2*np.pi*k/n_arms
+        parts.append(prism(annular_sector(r0, r1, a - w/2, a + w/2), 0.0, h))
+    return merge(*parts)

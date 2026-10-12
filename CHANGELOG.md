@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0] - 2026-10-11
+
+### Added
+
+- `geometry`: shaft couplings. `fork` and `cross` of a Hooke joint; `spline_shaft` and
+  `spline_bore`, the ISO 4156 involute spline (30 degrees, flat root) and its hub;
+  `spherical_shell` for the bell of a ball joint; `jaw_hub` and `spider` of a jaw
+  coupling; and the helpers they are built from: `merge` and `place` to assemble and move
+  parts, `cylinder`, `slot` (a bar with round ends), `annular_sector`.
+- `spur_tooth` and `spur_outline` take the addendum and dedendum factors `ha` and `hf`
+  (1 and 1.25 for gears; 0.5 and 0.75 for a spline shaft).
+
 ## [0.3.2] - 2026-10-11
 
 ### Added

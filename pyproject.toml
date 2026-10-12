@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mechanicskit-parts"
-version = "0.3.2"
+version = "0.4.0"
 authors = [{ name = "Mirza Cenanovic", email = "mirza.cenanovic@gmail.com" }]
 description = "Parametric machine-element parts for teaching, with adapters for Blender and other engineering software."
 readme = "README.md"
