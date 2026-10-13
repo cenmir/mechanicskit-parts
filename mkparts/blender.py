@@ -219,6 +219,13 @@ def painted(color, name='Paint'):
     return material(name, color, metallic=0.0, roughness=0.4, coat=0.5)
 
 
+def matte(color, name='Matte', roughness=0.5, coat=0.1):
+    """Coloured matte plastic, the look of a 3D-printed or moulded part: no metal, a soft
+    highlight. Use it for parts that are told apart by colour (sun, planets, ring)."""
+    return bpy.data.materials.get(name) or material(name, color, metallic=0.0,
+                                                    roughness=roughness, coat=coat)
+
+
 def heat_steel(name='HotSteel', glow=(1.0, 0.12, 0.01), tint=(0.30, 0.07, 0.02), strength=1.2):
     """Steel whose temperature is shown by colour, for heating and cooling animations.
 
@@ -301,6 +308,23 @@ def cut_below_above(ob, z_bot, z_top, size):
         cutter = bpy.context.object
         cutter.scale = (3*size, 3*size, 2*size)
         mod = ob.modifiers.new('cut', 'BOOLEAN')
+        mod.operation, mod.object, mod.solver = 'DIFFERENCE', cutter, 'EXACT'
+        bpy.context.view_layer.objects.active = ob
+        bpy.ops.object.modifier_apply(modifier=mod.name)
+        bpy.data.objects.remove(cutter)
+    return ob
+
+
+def drill(ob, holes, z0, z1):
+    """Drill round holes through `ob` along z from z0 to z1 (mm), at holes = [(x, y, r), ...]
+    in the object's own frame (mm), with one exact boolean each. Build the part once and
+    move it; booleans are too slow to repeat per frame."""
+    for x, y, r in holes:
+        bpy.ops.mesh.primitive_cylinder_add(vertices=64, radius=r*MM, depth=(z1 - z0 + 2)*MM,
+                                            location=(x*MM, y*MM, (z0 + z1)/2*MM))
+        cutter = bpy.context.object
+        cutter.matrix_world = ob.matrix_world @ cutter.matrix_world
+        mod = ob.modifiers.new('drill', 'BOOLEAN')
         mod.operation, mod.object, mod.solver = 'DIFFERENCE', cutter, 'EXACT'
         bpy.context.view_layer.objects.active = ob
         bpy.ops.object.modifier_apply(modifier=mod.name)

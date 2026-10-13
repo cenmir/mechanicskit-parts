@@ -694,3 +694,109 @@ def spider(r0, r1, h, n_arms=6, arm_frac=0.5, r_core=None):
         a = 2*np.pi*k/n_arms
         parts.append(prism(annular_sector(r0, r1, a - w/2, a + w/2), 0.0, h))
     return merge(*parts)
+
+
+def cycloid_disc(n_pins, R_pins, e, r_pin, n=2000):
+    """Outline of the disc of a cycloidal drive with ``n_pins`` pins of radius ``r_pin`` on
+    the circle ``R_pins`` and the eccentricity ``e``, in the disc's own frame.
+
+    The disc has n_pins - 1 lobes. A pin centre seen from the disc runs along the
+    epitrochoid z(t) = R_pins e^{it} - e e^{i n_pins t}, traced by a point e from the centre
+    of a circle of radius R_pins/n_pins rolling outside a base circle (n_pins - 1) times as
+    large; the disc is that curve moved inwards by r_pin along its normal. The offset is
+    free of loops while r_pin is smaller than the curve's smallest radius of curvature where
+    it is convex, on the shoulders of the valleys, which ``cycloid_min_radius`` returns. A valley of the disc (a pin seated
+    in it) lies on the positive x axis.
+
+    Returns (x, y), each (n,), closed counter-clockwise.
+    """
+    t = np.linspace(0, 2*np.pi, n, endpoint=False)
+    z = R_pins*np.exp(1j*t) - e*np.exp(1j*n_pins*t)
+    dz = 1j*R_pins*np.exp(1j*t) - 1j*n_pins*e*np.exp(1j*n_pins*t)
+    p = z + 1j*r_pin*dz/np.abs(dz)                  # i dz/|dz| is the inward normal
+    return p.real, p.imag
+
+
+def cycloid_min_radius(n_pins, R_pins, e, n=20000):
+    """The smallest radius of curvature of the pin-centre epitrochoid of ``cycloid_disc``
+    where it is convex (the shoulders beside each valley); the pin radius must stay below it."""
+    t = np.linspace(0, 2*np.pi, n, endpoint=False)
+    dz = 1j*R_pins*np.exp(1j*t) - 1j*n_pins*e*np.exp(1j*n_pins*t)
+    ddz = -R_pins*np.exp(1j*t) + n_pins**2*e*np.exp(1j*n_pins*t)
+    speed = np.abs(dz)
+    if speed.min() < 1e-9*R_pins:                               # e = R/n: an epicycloid with cusps
+        return 0.0
+    kappa = np.imag(np.conj(dz)*ddz)/speed**3
+    return 1/kappa.max()
+
+
+def ring_gear(N, m, b, r_out, beta_deg=0.0, phi_deg=20.0, n_z=24, chamfer=None):
+    """An internal (ring) gear of N teeth, module m and face width b (mm) inside a plain rim
+    of outer radius r_out, from z = 0 to b.
+
+    The tooth space is an external involute tooth with the addendum and dedendum swapped,
+    so the tips lie at m(N/2 - 1) and the roots at m(N/2 + 1.25); a space is centred on
+    theta = 0. A helix angle beta (degrees) turns the teeth by tan(beta) (z - b/2) / r_p, which
+    meshes with an external gear of the same beta (same hand). `chamfer` (mm) breaks the
+    tips at both faces. Returns vertices, faces and tags as `radial_solid`: the rim is
+    'outer', the teeth 'inner'.
+    """
+    th, r = spur_outline(N, m, phi_deg, ha=1.25, hf=1.0)
+    rp = m*N/2
+    z = np.unique(np.r_[np.linspace(0, b, n_z + 1), b/2])
+    th_c = np.r_[th, th[0] + 2*np.pi]
+    r_in = np.repeat(np.r_[r, r[:1]][:, None], len(z), 1)
+    if chamfer:
+        e = np.minimum(z, b - z)[None, :]
+        r_in = np.maximum(r_in, rp - m + chamfer - e)
+    verts, faces, tags = radial_solid(th_c, z, np.full_like(r_in, r_out), r_in)
+    n_out = len(verts)//2                                         # the teeth are the second half
+    a = np.tan(np.radians(beta_deg))/rp*(verts[n_out:, 2] - b/2)  # untwisted at mid-face, as helical_gear
+    c, s = np.cos(a), np.sin(a)
+    x, y = verts[n_out:, 0].copy(), verts[n_out:, 1].copy()
+    verts[n_out:, 0], verts[n_out:, 1] = c*x - s*y, s*x + c*y
+    return verts, faces, tags
+
+
+def cycloid_disc_solid(n_pins, R_pins, e, r_pin, t, bore, n=1800):
+    """The disc of `cycloid_disc` as a solid from z = 0 to t with a central bore of diameter
+    `bore` (the eccentric bearing); the output holes are drilled afterwards. The outline is
+    star-shaped about the disc centre, so it is resampled in polar form for `radial_solid`."""
+    x, y = cycloid_disc(n_pins, R_pins, e, r_pin, n=8*n)
+    th = np.unwrap(np.arctan2(y, x))
+    th, r = th - th[0], np.hypot(x, y)
+    grid = np.linspace(0, 2*np.pi, n + 1)
+    r_g = np.interp(grid, np.r_[th, 2*np.pi], np.r_[r, r[0]])
+    z = np.array([0.0, t])
+    return radial_solid(grid, z, np.repeat(r_g[:, None], 2, 1), np.full((n + 1, 2), bore/2))
+
+
+def flexspline(N, m, b, L, t_wall, w0, psi=0.0, n_z=12, base=None):
+    """The flexspline of a strain wave gear: a cup with N external teeth (module m) over the
+    top b of its height L, a wall t_wall thick under the teeth, and a closed bottom, bent
+    into an ellipse by a wave generator whose major axis lies at the angle psi.
+
+    The radial deflection is w0 cos 2(theta - psi) at the open end (z = L) and falls
+    linearly to zero at the bottom (z = 0), as the cup's diaphragm holds it round there. A
+    tooth is centred on theta = 0 before bending. `base` is the bottom's thickness
+    (default 2 t_wall). Returns (verts, faces, tags); the teeth are 'outer'.
+    """
+    th, r = spur_outline(N, m)
+    rp = m*N/2
+    r_wall = rp - 1.25*m                                     # the root circle is the outside of the wall
+    th_c = np.r_[th, th[0] + 2*np.pi]
+    z = np.unique(np.r_[np.linspace(0, L - b, n_z), np.linspace(L - b, L, 6)])
+    teeth = np.r_[r, r[:1]][:, None]
+    r_out = np.where(z[None, :] >= L - b - 1e-9, teeth, r_wall)
+    r_in = np.full_like(r_out, r_wall - t_wall)
+    w = w0*np.cos(2*(th_c[:, None] - psi))*(z[None, :]/L)
+    verts, faces, tags = radial_solid(th_c, z, r_out + w, r_in + w)
+    bottom = cylinder(r_wall - t_wall + 0.01, 0.0, base if base is not None else 2*t_wall)
+    return merge((verts, faces, tags), bottom)
+
+
+def epitrochoid(n_pins, R_pins, e, t):
+    """Points (len(t), 2) of the pin-centre path of a cycloid disc seen from the disc:
+    R_pins [cos t, sin t] - e [cos n t, sin n t], see `cycloid_disc`."""
+    t = np.asarray(t, float)
+    return np.c_[R_pins*np.cos(t) - e*np.cos(n_pins*t), R_pins*np.sin(t) - e*np.sin(n_pins*t)]

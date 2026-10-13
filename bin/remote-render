@@ -13,6 +13,8 @@
 #   RENDER_HOST     ssh host name of the render machine           (default: euler)
 #   RENDER_BLENDER  path of blender.exe on that machine
 #                   (default: C:\Program Files\Blender Foundation\Blender 5.2\blender.exe)
+#   RENDER_SHELL    'powershell' if the host's ssh shell is PowerShell (dolores): the cmd
+#                   commands are then fed to cmd.exe on stdin
 set -e
 FETCH=./out
 if [ "$1" = "-f" ]; then FETCH=$2; shift 2; fi
@@ -20,23 +22,31 @@ if [ "$1" = "-f" ]; then FETCH=$2; shift 2; fi
 script=$1; shift
 
 HOST=${RENDER_HOST:-euler}
+# run a cmd.exe command line on the host, whatever its ssh shell
+rsh() {
+  if [ "${RENDER_SHELL:-cmd}" = powershell ]; then
+    printf '%s\r\nexit\r\n' "$1" | ssh "$HOST" cmd /q
+  else
+    ssh "$HOST" "$1"
+  fi
+}
 BLENDER=${RENDER_BLENDER:-'C:\Program Files\Blender Foundation\Blender 5.2\blender.exe'}
 PKG=$(cd "$(dirname "$0")/.." && pwd)/mkparts
 SRC=$(cd "$(dirname "$script")" && pwd)
 JOB=$(basename "$script" .py)
 REMOTE="render\\$JOB"
 
-ssh "$HOST" "(if exist $REMOTE rmdir /s /q $REMOTE) & mkdir $REMOTE\\mkparts"
+rsh "(if exist $REMOTE rmdir /s /q $REMOTE) & mkdir $REMOTE\\mkparts"
 scp -q "$SRC"/*.py "$HOST:render/$JOB/"
 scp -q "$PKG"/*.py "$HOST:render/$JOB/mkparts/"
 
 start=$(date +%s)
-ssh "$HOST" "cd $REMOTE && \"$BLENDER\" -b -P $JOB.py -- $* --gpu --out out" \
+rsh "cd $REMOTE && \"$BLENDER\" -b -P $JOB.py -- $* --gpu --out out" \
   | grep --line-buffered -E 'Cycles device|Saved|Error|Traceback|line [0-9]+' || true
 echo "rendered in $(( $(date +%s) - start )) s"
 
 mkdir -p "$FETCH"
-if ssh "$HOST" "if exist $REMOTE\\out (exit 0) else (exit 1)"; then
+if [ "${RENDER_SHELL:-cmd}" = powershell ] || ssh "$HOST" "if exist $REMOTE\\out (exit 0) else (exit 1)"; then
   scp -q -r "$HOST:render/$JOB/out/." "$FETCH/"
   echo "fetched into $FETCH"
 else

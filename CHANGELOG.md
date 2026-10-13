@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.0] - 2026-10-13
+
+### Added
+
+- `geometry.ring_gear` and `gears.ring_gear`: an internal (ring) gear in a plain rim, helical
+  with the same hand as its planets; a space on +x.
+- `geometry.cycloid_disc`, `cycloid_disc_solid`, `cycloid_min_radius` and `epitrochoid`:
+  the disc of a cycloidal drive from the pin-centre epitrochoid moved in by the pin radius,
+  and the smallest convex radius of curvature the pin must stay below (0 for the cusped
+  epicycloid).
+- `geometry.flexspline`: the cup of a strain wave gear bent into an ellipse, the deflection
+  growing from the bottom to the open end.
+- `blender.matte(color)`: coloured matte plastic, for parts told apart by colour.
+- `blender.drill(ob, holes, z0, z1)`: holes through a part with exact booleans, once.
+- `bin/remote-render`: `RENDER_SHELL=powershell` for hosts whose ssh shell is PowerShell
+  (dolores); the cmd commands go to cmd.exe on stdin.
+
 ## [0.4.0] - 2026-10-11
 
 ### Added

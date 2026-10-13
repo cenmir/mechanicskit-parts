@@ -88,3 +88,12 @@ def bevel_body(name, N, m, delta_deg, F, depth, d_bore, bk, hk, hub, mats, hub_s
     v, f, t = geo.radial_solid(th, z, np.repeat(np.asarray(r)[None, :], len(th), 0),
                                np.repeat(bore[:, None], len(z), 1))
     return tagged_object(name, v, f, t, mats, smooth_angle=30), (min(z), max(z))
+
+
+def ring_gear(name, N, m, b, r_out, mats, beta=0.0, location=(0, 0, 0), phi_deg=20.0,
+              chamfer=None, n_z=24):
+    """An internal gear of N teeth in a rim of outer radius r_out, see `geometry.ring_gear`;
+    a space is centred on the +x axis. `mats` maps 'outer' (rim), 'inner' (teeth) and
+    'end' (faces)."""
+    verts, faces, tags = geo.ring_gear(N, m, b, r_out, beta, phi_deg, n_z, chamfer)
+    return tagged_object(name, verts, faces, tags, mats, location, smooth_angle=25)
