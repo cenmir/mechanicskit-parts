@@ -28,7 +28,7 @@ that looks about right.
 | Module | Runs in | Contents |
 |---|---|---|
 | `mkparts.geometry` | any Python with numpy | Wire centre lines for compression (closed and ground ends, conical, variable pitch), extension and torsion springs; disc-spring sections; `revolve` for any solid of revolution. Millimetres throughout. |
-| `mkparts.blender` | Blender | The house style: empty scene, Cycles, transparent film with a shadow catcher, studio lighting, materials (steel, powder coat), camera fitted to the objects, GPU selection, command-line flags. |
+| `mkparts.blender` | Blender | The house style: empty scene, Cycles, transparent film with a shadow catcher, studio lighting, materials (steel, powder coat), camera fitted to the objects, force and moment arrows (`arrow`, `arc_arrow`), GPU selection, command-line flags. |
 | `mkparts.springs` | Blender | Springs as objects: sweeps a wire along a centre line, grinds the ends flat, revolves disc springs. |
 | `mkparts.fasteners` | Blender | Bolts, nuts and clamped plates from `geometry.radial_solid`: the ISO 68-1 thread on a true helix, hexagon heads and nuts with chamfers, whole parts or sections with flat cut faces. |
 | `mkparts.gears` | Blender | Spur, helical and herringbone gears from `geometry.spur_outline` (involute, optional root fillet), cylindrical worms, spiral bevel gears (`bevel_gear` teeth on Tredgold's virtual spur gear, `bevel_body` under them), and shafts with a parallel key; bores may carry a keyway or a keyhole. `blender.pivot` and `blender.adopt` turn a gear with its shaft about its own axis, and `blender.paint_stripe` paints a radius on it. `blender.heat_steel` shows a part's temperature by colour for heating and cooling animations. |

@@ -418,3 +418,45 @@ def paint_stripe(name, r0, r1, w, z, mat):
     as a radius painted on a gear: parent it to the gear's pivot and it turns with it."""
     v, f, t = geometry.prism(geometry.ribbon([(r0, 0), (r1, 0)], w), z - 0.05, z + 0.12)
     return tagged_object(name, v, f, t, {'outer': mat}, smooth_angle=40)
+
+
+# ---------------------------------------------------------------- load arrows
+def _cone(name, base, tip, r, mat, n=32):
+    """A solid cone (arrowhead) from the centre of its base to its tip, both in mm."""
+    base, tip = np.asarray(base, float), np.asarray(tip, float)
+    h = np.linalg.norm(tip - base)
+    v, f = geometry.revolve([(0, 0), (r, 0), (0, h)], n=n)
+    ob = mesh(name, v, f, mat)
+    ob.location = tuple(base*MM)
+    ob.rotation_euler = Vector(tip - base).to_track_quat('Z', 'Y').to_euler()
+    for p in ob.data.polygons:
+        p.use_smooth = True
+    mod = ob.modifiers.new('sharp', 'EDGE_SPLIT')
+    mod.split_angle = np.radians(40)
+    return ob
+
+
+def arrow(name, tail, tip, mat, d=1.6, head=(4.5, 9.0)):
+    """A straight force arrow from tail to tip (mm): a round shaft of diameter d and a cone
+    head of base diameter head[0] and length head[1], whose point is at tip. Returns the
+    shaft and the head."""
+    tail, tip = np.asarray(tail, float), np.asarray(tip, float)
+    e = (tip - tail)/np.linalg.norm(tip - tail)
+    hl = min(head[1], 0.6*np.linalg.norm(tip - tail))
+    neck = tip - hl*e
+    shaft = wire(name, [tail, neck + 0.3*e], d, mat)
+    return shaft, _cone(name + 'Head', neck, tip, head[0]/2, mat)
+
+
+def arc_arrow(name, centre, radius, sweep, mat, start=0.0, d=1.6, head=(4.5, 9.0), n=96):
+    """A curved moment arrow in the plane z = centre[2] about the z axis through centre
+    (mm), from angle `start` turning counterclockwise by `sweep` (radians), head at the end:
+    a torque vector along +z by the right-hand rule."""
+    c = np.asarray(centre, float)
+    hang = head[1]/radius                                # angle the head takes up
+    a = np.linspace(start, start + max(sweep - hang, 0.05), n)
+    pts = np.c_[c[0] + radius*np.cos(a), c[1] + radius*np.sin(a), np.full(n, c[2])]
+    shaft = wire(name, pts, d, mat)
+    a1, a2 = start + sweep - hang, start + sweep
+    p = lambda t: c + radius*np.array([np.cos(t), np.sin(t), 0])
+    return shaft, _cone(name + 'Head', p(a1), p(a2), head[0]/2, mat)

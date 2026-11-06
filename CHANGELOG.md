@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.6.0] - 2026-11-06
+
+### Added
+
+- `blender.arrow(name, tail, tip, mat)`: a straight force arrow, round shaft and cone head
+  with its point at the tip.
+- `blender.arc_arrow(name, centre, radius, sweep, mat)`: a curved moment arrow about the z
+  axis, counterclockwise, so the moment vector points along +z by the right-hand rule.
+
 ## [0.5.0] - 2026-10-13
 
 ### Added
